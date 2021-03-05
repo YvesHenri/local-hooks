@@ -1,9 +1,0 @@
-C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\Bin\Debug\APP.exe.config
-C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\Bin\Debug\APP.exe
-C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\Bin\Debug\APP.pdb
-C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Debug\APP.Form1.resources
-C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Debug\APP.Properties.Resources.resources
-C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Debug\APP.csproj.GenerateResource.cache
-C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Debug\APP.csproj.CoreCompileInputs.cache
-C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Debug\APP.exe
-C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Debug\APP.pdb
