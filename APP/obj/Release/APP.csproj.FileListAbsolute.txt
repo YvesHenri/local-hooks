@@ -1,0 +1,10 @@
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\Bin\Release\APP.exe.config
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\Bin\Release\APP.exe
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\Bin\Release\APP.pdb
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Release\APP.csprojAssemblyReference.cache
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Release\APP.Form1.resources
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Release\APP.Properties.Resources.resources
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Release\APP.csproj.GenerateResource.cache
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Release\APP.csproj.CoreCompileInputs.cache
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Release\APP.exe
+C:\Users\Nooder\Documents\Visual Studio 2019\Projects\Hooks\APP\obj\Release\APP.pdb
