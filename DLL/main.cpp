@@ -1,55 +1,59 @@
-#include "main.h"
+#include <Windows.h>
+#include <string>
 
-void log(const char* message)
-{
-    FILE* file = NULL;
+#pragma data_seg(".dll")
+HHOOK _hookHandle = NULL;
+HOOKPROC _hookCallback = NULL;
+HINSTANCE _moduleHandle = NULL;
+#pragma comment(linker, "/SECTION:.dll,RWS")
+#pragma data_seg()
 
-    freopen_s(&file, "logs.txt", "a", stdout);
-
-    if (file)
-    {
-        std::cout << message << std::endl;
-        fclose(file);
-    }
-}
-
-HHOOK Install(int idHook, HWND window, HOOKPROC hookCallback)
-{
-    auto processId = 0ul;
-    auto threadId = GetWindowThreadProcessId(window, &processId);
-
-    _hookCallback = hookCallback;
-    _hookInstance = SetWindowsHookExA(idHook, HookProc, _moduleHandle, threadId);
-
-    return _hookInstance;
-}
-
+// This gets executed within the target process memory region
 LRESULT CALLBACK HookProc(int code, WPARAM wParam, LPARAM lParam)
 {
     if (code > 0)
     {
-        if (wParam == WM_MBUTTONUP)
-        {
-            if (_hookCallback)
-            {
-                log("callback ok");
+        auto hostProcessFunctionPointerAddress = 0xdeadbeef;
 
-                try
-                {
-                    _hookCallback(code, wParam, lParam);
-                }
-                catch (...)
-                {
-                    log("error");
-                }
-            }
-            else
-                log("callback invalid");
-        }
     }
 
-    return CallNextHookEx(_hookInstance, code, wParam, lParam);
+    return CallNextHookEx(_hookHandle, code, wParam, lParam);
 }
+
+extern "C" __declspec(dllexport)
+HHOOK Install(int idHook, HWND window, HOOKPROC hookCallback)
+{
+    auto targetProcessId = 0ul;
+    auto targetProcessThreadId = GetWindowThreadProcessId(window, &targetProcessId);
+    auto hostProcessId = GetCurrentProcessId();
+    auto hostProcessHandle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, hostProcessId);
+
+    if (hostProcessHandle)
+    {
+        // VirtualAllocEx(hostProcessHandle, NULL, sizeof(HOOKPROC), MEM_COMMIT, PAGE_READWRITE);
+
+        _hookCallback = hookCallback;
+        _hookHandle = SetWindowsHookExA(idHook, HookProc, _moduleHandle, targetProcessThreadId);
+
+        return _hookHandle;
+    }
+    else
+    {
+        return NULL;
+    }
+}
+
+/*
+void CreateIPC()
+{
+    auto fileMappingHandle = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, NULL, sizeof(HOOKDATA), "sfm");
+
+    if (fileMappingHandle)
+    {
+        auto fileMappingData = (HOOKDATA*) MapViewOfFile(fileMappingHandle, FILE_MAP_WRITE | FILE_MAP_READ, NULL, NULL, sizeof(HOOKDATA));
+    }
+}
+*/
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
@@ -59,6 +63,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             _moduleHandle = hModule;
             break;
         case DLL_PROCESS_DETACH:
+            break;
         case DLL_THREAD_ATTACH:
         case DLL_THREAD_DETACH:
             break;

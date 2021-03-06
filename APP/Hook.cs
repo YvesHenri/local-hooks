@@ -132,17 +132,18 @@ namespace APP
                     Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install(Process) - Installing");
                     WinAPI.IsWow64Process(process.Handle, out bool isWow64Process);
 
-                    IntPtr callbackPointer = Marshal.GetFunctionPointerForDelegate(hook.handler);
+                    // TODO Test passing the delegate object using [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+                    IntPtr delegatePointer = Marshal.GetFunctionPointerForDelegate(hook.handler);
 
                     // If OS is not 64 bits, process can't be 64 bits either
                     if (Environment.Is64BitOperatingSystem && !isWow64Process)
                     {
-                        hook.instance = Install64(hook.LocalHookId, process.MainWindowHandle, callbackPointer);
+                        hook.instance = Install64(hook.LocalHookId, process.MainWindowHandle, delegatePointer);
                         Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install(Process) - Installed 64 bits");
                     }
                     else
                     {
-                        hook.instance = Install32(hook.LocalHookId, process.MainWindowHandle, callbackPointer);
+                        hook.instance = Install32(hook.LocalHookId, process.MainWindowHandle, delegatePointer);
                         Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install(Process) - Installed 32 bits");
                     }
                 }
