@@ -23,7 +23,7 @@ namespace APP
             const uint LLKHF_LOWER_IL_INJECTED = 0x00000002;
             const uint LLKHF_EXTENDED = 0x00000001;
             const uint LLKHF_ALTDOWN = 0x00000020;
-            const uint LLKHF_UP = 0x00000080;
+            // const uint LLKHF_UP = 0x00000080;
 
             Time = time;
             KeyCode = keyCode;

@@ -57,6 +57,8 @@
     </Compile>
     <Compile Include="Hook.cs" />
     <Compile Include="HookCallback.cs" />
+    <Compile Include="HookRequest.cs" />
+    <Compile Include="HookServer.cs" />
     <Compile Include="HookService.cs" />
     <Compile Include="KeyboardHook.cs" />
     <Compile Include="KeyboardHookEvent.cs" />

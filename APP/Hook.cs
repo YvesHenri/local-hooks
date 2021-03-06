@@ -7,26 +7,24 @@ namespace APP
 {
     public abstract class Hook
     {
-        [DllImport("DLL32.dll", EntryPoint = "Install", CallingConvention = CallingConvention.Cdecl)]
-        protected static extern IntPtr Install32(int idHook, IntPtr windowHandle, IntPtr callbackPointer);
+        [DllImport("DLL32.dll", EntryPoint = "Install", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        protected static extern IntPtr Install32(int idHook, IntPtr windowHandle, [MarshalAs(UnmanagedType.LPStr)] string pipeServerName);
 
-        [DllImport("DLL64.dll", EntryPoint = "Install", CallingConvention = CallingConvention.Cdecl)]
-        protected static extern IntPtr Install64(int idHook, IntPtr windowHandle, IntPtr callbackPointer);
+        [DllImport("DLL64.dll", EntryPoint = "Install", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        protected static extern IntPtr Install64(int idHook, IntPtr windowHandle, [MarshalAs(UnmanagedType.LPStr)] string pipeServerName);
 
-        /*
         [DllImport("DLL32.dll", EntryPoint = "Uninstall", CallingConvention = CallingConvention.Cdecl)]
-        protected static extern bool Uninstall32(IntPtr hookHandle);
+        protected static extern bool Uninstall32();
 
         [DllImport("DLL64.dll", EntryPoint = "Uninstall", CallingConvention = CallingConvention.Cdecl)]
-        protected static extern bool Uninstall64(IntPtr hookHandle);
-        */
+        protected static extern bool Uninstall64();
 
         protected abstract int LocalHookId { get; }
         protected abstract int GlobalHookId { get; }
 
         protected IntPtr instance;
-        protected readonly HookCallback handler;
-        protected readonly GCHandle garbageCollectorHandle;
+        protected readonly HookServer server;
+        protected readonly HookCallback callback;
 
         public bool Installed
         {
@@ -36,13 +34,8 @@ namespace APP
         public Hook()
         {
             instance = IntPtr.Zero;
-            handler = new HookCallback(Callback);
-            garbageCollectorHandle = GCHandle.Alloc(handler);
-        }
-
-        ~Hook()
-        {
-            garbageCollectorHandle.Free();
+            server = new HookServer(Callback);
+            callback = new HookCallback(Callback);
         }
 
         protected abstract IntPtr Callback(int nCode, IntPtr wParam, IntPtr lParam);
@@ -64,10 +57,11 @@ namespace APP
 
             public THook Install()
             {
-                if (!Global.Installed && !Install(Global))
+                if (!Global.Installed)
                 {
-                    Console.WriteLine($"Failed to install {Global.GetType().Name} locally.");
-                    // throw new Exception($"Failed to install {Global.GetType().Name} globally.");
+                    var processModuleHandle = WinAPI.LoadLibrary("User32");
+
+                    Global.instance = WinAPI.SetWindowsHookEx(Global.GlobalHookId, Global.callback, processModuleHandle, 0);
                 }
 
                 return Global;
@@ -78,9 +72,23 @@ namespace APP
                 // Get or create hook for corresponding process
                 if (!localHooks.TryGetValue(process, out THook hook))
                 {
+                    WinAPI.IsWow64Process(process.Handle, out bool isWow64Process);
+
                     hook = new THook();
-                    
-                    if (Install(hook, process))
+                    hook.server.Start();
+
+                    // If OS is not 64 bits, process can't be 64 bits either
+                    if (Environment.Is64BitOperatingSystem && !isWow64Process)
+                    {
+                        hook.instance = Install64(hook.LocalHookId, process.MainWindowHandle, hook.server.Name);
+                    }
+                    else
+                    {
+                        hook.instance = Install32(hook.LocalHookId, process.MainWindowHandle, hook.server.Name);
+                    }
+
+                    // Cache successfull hooks
+                    if (hook.Installed)
                     {
                         localHooks.Add(process, hook);
                     }
@@ -99,58 +107,6 @@ namespace APP
                 return localHooks.TryGetValue(process, out THook hook) && Uninstall(hook, process);
             }
 
-            private bool Install(THook hook)
-            {
-                Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install");
-
-                if (!hook.Installed)
-                {
-                    Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install - Installing");
-
-                    using (Process process = Process.GetCurrentProcess())
-                    {
-                        using (ProcessModule processModule = process.MainModule)
-                        {
-                            var processModuleHandle = WinAPI.LoadLibrary("User32"); // WinAPI.GetModuleHandle(processModule.ModuleName);
-
-                            hook.instance = WinAPI.SetWindowsHookEx(hook.GlobalHookId, hook.handler, processModuleHandle, 0);
-
-                            Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install - Installed");
-                        }
-                    }
-                }
-
-                return hook.Installed;
-            }
-
-            private bool Install(THook hook, Process process)
-            {
-                Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install(Process)");
-
-                if (!hook.Installed)
-                {
-                    Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install(Process) - Installing");
-                    WinAPI.IsWow64Process(process.Handle, out bool isWow64Process);
-
-                    // TODO Test passing the delegate object using [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-                    IntPtr delegatePointer = Marshal.GetFunctionPointerForDelegate(hook.handler);
-
-                    // If OS is not 64 bits, process can't be 64 bits either
-                    if (Environment.Is64BitOperatingSystem && !isWow64Process)
-                    {
-                        hook.instance = Install64(hook.LocalHookId, process.MainWindowHandle, delegatePointer);
-                        Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install(Process) - Installed 64 bits");
-                    }
-                    else
-                    {
-                        hook.instance = Install32(hook.LocalHookId, process.MainWindowHandle, delegatePointer);
-                        Debug.WriteLine($"Hook.Service<{typeof(THook).Name}>::Install(Process) - Installed 32 bits");
-                    }
-                }
-
-                return hook.Installed;
-            }
-
             private bool Uninstall(THook hook)
             {
                 return hook.Installed && WinAPI.UnhookWindowsHookEx(hook.instance);
@@ -158,7 +114,19 @@ namespace APP
 
             private bool Uninstall(THook hook, Process process)
             {
-                return Uninstall(hook) && localHooks.Remove(process);
+                WinAPI.IsWow64Process(process.Handle, out bool isWow64Process);
+
+                hook.server.Stop();
+
+                // If OS is not 64 bits, process can't be 64 bits either
+                if (Environment.Is64BitOperatingSystem && !isWow64Process)
+                {
+                    return Uninstall64() && localHooks.Remove(process);
+                }
+                else
+                {
+                    return Uninstall32() && localHooks.Remove(process);
+                }
             }
 
             public bool Destroy()
