@@ -21,11 +21,11 @@ namespace APP
         private const uint MK_LBUTTON = 0x0001;
         private const uint MK_MBUTTON = 0x0010;
         private const uint MK_RBUTTON = 0x0002;
-        private const uint MK_XBUTTON1 = 0x0020;
-        private const uint MK_XBUTTON2 = 0x0040;
+        // private const uint MK_XBUTTON1 = 0x0020;
+        // private const uint MK_XBUTTON2 = 0x0040;
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct MSLLHOOKSTRUCT
+        private struct MSLLHOOKSTRUCT
         {
             public int x;
             public int y;
@@ -33,6 +33,16 @@ namespace APP
             public uint flags;
             public uint time;
             public UIntPtr dwExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MOUSEHOOKSTRUCT
+        {
+            public int x;
+            public int y;
+            public IntPtr hwnd;
+            public uint wHitTestCode;
+            public IntPtr dwExtraInfo;
         }
 
         public event MouseHookEvent OnHook;
@@ -49,39 +59,45 @@ namespace APP
         {
             if (nCode >= 0)
             {
-                var ms = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-
-                switch (wParam.ToInt32())
+                if (id == LocalHookId)
                 {
-                    case WM_MBUTTONDOWN:
-                        HandleKeyDownHookEvent(new MouseHookEventArgs(MK_MBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
-                        break;
-                    case WM_LBUTTONDOWN:
-                        HandleKeyDownHookEvent(new MouseHookEventArgs(MK_LBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
-                        break;
-                    case WM_RBUTTONDOWN:
-                        HandleKeyDownHookEvent(new MouseHookEventArgs(MK_RBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
-                        break;
-                    case WM_MBUTTONUP:
-                        HandleKeyReleasedHookEvent(new MouseHookEventArgs(MK_MBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
-                        break;
-                    case WM_LBUTTONUP:
-                        HandleKeyReleasedHookEvent(new MouseHookEventArgs(MK_LBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
-                        break;
-                    case WM_RBUTTONUP:
-                        HandleKeyReleasedHookEvent(new MouseHookEventArgs(MK_RBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
-                        break;
-                    case WM_MOUSEMOVE:
-                        OnMove?.Invoke(new MouseHookEventArgs(MK_NONE, ms.flags, ms.time, ms.data, ms.x, ms.y));
-                        break;
-                    case WM_MOUSEWHEEL:
-                        OnWheel?.Invoke(new MouseHookEventArgs(MK_NONE, ms.flags, ms.time, ms.data, ms.x, ms.y));
-                        break;
+                    var ms = Marshal.PtrToStructure<MOUSEHOOKSTRUCT>(lParam);
+
+                    Console.WriteLine("{0}, {1}", ms.x, ms.y);
                 }
-            }
-            else
-            {
-                Console.WriteLine("Beep");
+
+                if (id == GlobalHookId)
+                {
+                    var ms = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+
+                    switch (wParam.ToInt32())
+                    {
+                        case WM_MOUSEMOVE:
+                            OnMove?.Invoke(new MouseHookEventArgs(MK_NONE, ms.flags, ms.time, ms.data, ms.x, ms.y));
+                            break;
+                        case WM_MOUSEWHEEL:
+                            OnWheel?.Invoke(new MouseHookEventArgs(MK_NONE, ms.flags, ms.time, ms.data, ms.x, ms.y));
+                            break;
+                        case WM_MBUTTONDOWN:
+                            HandleKeyDownHookEvent(new MouseHookEventArgs(MK_MBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
+                            break;
+                        case WM_LBUTTONDOWN:
+                            HandleKeyDownHookEvent(new MouseHookEventArgs(MK_LBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
+                            break;
+                        case WM_RBUTTONDOWN:
+                            HandleKeyDownHookEvent(new MouseHookEventArgs(MK_RBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
+                            break;
+                        case WM_MBUTTONUP:
+                            HandleKeyReleasedHookEvent(new MouseHookEventArgs(MK_MBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
+                            break;
+                        case WM_LBUTTONUP:
+                            HandleKeyReleasedHookEvent(new MouseHookEventArgs(MK_LBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
+                            break;
+                        case WM_RBUTTONUP:
+                            HandleKeyReleasedHookEvent(new MouseHookEventArgs(MK_RBUTTON, ms.flags, ms.time, ms.data, ms.x, ms.y));
+                            break;
+                    }
+                }
             }
 
             return WinAPI.CallNextHookEx(instance, nCode, wParam, lParam);

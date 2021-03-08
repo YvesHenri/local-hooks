@@ -8,10 +8,10 @@ namespace APP
     public abstract class Hook
     {
         [DllImport("DLL32.dll", EntryPoint = "Install", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        protected static extern IntPtr Install32(int idHook, IntPtr windowHandle, [MarshalAs(UnmanagedType.LPStr)] string pipeServerName);
+        protected static extern IntPtr Install32(int idHook, IntPtr targetWindow, IntPtr serverWindow);
 
         [DllImport("DLL64.dll", EntryPoint = "Install", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        protected static extern IntPtr Install64(int idHook, IntPtr windowHandle, [MarshalAs(UnmanagedType.LPStr)] string pipeServerName);
+        protected static extern IntPtr Install64(int idHook, IntPtr targetWindow, IntPtr serverWindow);
 
         [DllImport("DLL32.dll", EntryPoint = "Uninstall", CallingConvention = CallingConvention.Cdecl)]
         protected static extern bool Uninstall32();
@@ -22,7 +22,9 @@ namespace APP
         protected abstract int LocalHookId { get; }
         protected abstract int GlobalHookId { get; }
 
+        protected int id;
         protected IntPtr instance;
+
         protected readonly HookServer server;
         protected readonly HookCallback callback;
 
@@ -61,6 +63,7 @@ namespace APP
                 {
                     var processModuleHandle = WinAPI.LoadLibrary("User32");
 
+                    Global.id = Global.GlobalHookId;
                     Global.instance = WinAPI.SetWindowsHookEx(Global.GlobalHookId, Global.callback, processModuleHandle, 0);
                 }
 
@@ -72,19 +75,37 @@ namespace APP
                 // Get or create hook for corresponding process
                 if (!localHooks.TryGetValue(process, out THook hook))
                 {
+                    EventHandler eventHandler = null;
+
                     WinAPI.IsWow64Process(process.Handle, out bool isWow64Process);
-
+                    
                     hook = new THook();
-                    hook.server.Start();
+                    hook.id = hook.LocalHookId;
+                    hook.server.OnDestroyed += eventHandler = (sender, args) =>
+                    {
+                        lock (hook.server)
+                        {
+                            Console.WriteLine("Server went down. Uninstalling local hook for process {0}...", process.Id);
 
-                    // If OS is not 64 bits, process can't be 64 bits either
-                    if (Environment.Is64BitOperatingSystem && !isWow64Process)
+                            // Uninstall hook if server crashed or went down for some reason
+                            if (Uninstall(process))
+                            {
+                                hook.server.OnDestroyed -= eventHandler;
+                            }
+                        }
+                    };
+
+                    if (hook.server.Start())
                     {
-                        hook.instance = Install64(hook.LocalHookId, process.MainWindowHandle, hook.server.Name);
-                    }
-                    else
-                    {
-                        hook.instance = Install32(hook.LocalHookId, process.MainWindowHandle, hook.server.Name);
+                        // If OS is not 64 bits, process can't be 64 bits either
+                        if (Environment.Is64BitOperatingSystem && !isWow64Process)
+                        {
+                            hook.instance = Install64(hook.LocalHookId, process.MainWindowHandle, hook.server.Handle);
+                        }
+                        else
+                        {
+                            hook.instance = Install32(hook.LocalHookId, process.MainWindowHandle, hook.server.Handle);
+                        }
                     }
 
                     // Cache successfull hooks

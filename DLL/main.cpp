@@ -2,33 +2,12 @@
 #include <iostream>
 
 #pragma data_seg(".dll")
-
+HWND host = NULL;
 #pragma comment(linker, "/SECTION:.dll,RWS")
 #pragma data_seg()
 
-HANDLE pipe = NULL;
 HHOOK hook = NULL;
 HINSTANCE dll = NULL;
-
-void Log(const char* message)
-{
-    FILE* file = NULL;
-
-    freopen_s(&file, "logs.txt", "a", stdout);
-
-    if (file)
-    {
-        std::cout << message << std::endl;
-        fclose(file);
-    }
-
-}
-struct Request
-{
-    int code;
-    WPARAM wParam;
-    LPARAM lParam;
-};
 
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved)
 {
@@ -40,74 +19,300 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID reserved)
     return TRUE;
 }
 
-LRESULT CALLBACK HookProc(int code, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK CallWndProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    if (code == HC_ACTION)
+    {
+        COPYDATASTRUCT data {};
+
+        data.dwData = code;
+        data.cbData = sizeof(CWPSTRUCT);
+        data.lpData = reinterpret_cast<CWPSTRUCT*>(lParam);
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+LRESULT CALLBACK CallWndProcRet(int code, WPARAM wParam, LPARAM lParam)
+{
+    if (code == HC_ACTION)
+    {
+        COPYDATASTRUCT data {};
+
+        data.dwData = code;
+        data.cbData = sizeof(CWPRETSTRUCT);
+        data.lpData = reinterpret_cast<CWPRETSTRUCT*>(lParam);
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+LRESULT CALLBACK CBTProc(int code, WPARAM wParam, LPARAM lParam)
 {
     if (code >= 0)
     {
-        if (pipe != NULL && pipe != INVALID_HANDLE_VALUE)
+        COPYDATASTRUCT data {};
+
+        data.dwData = code;
+        data.cbData = sizeof(code);
+
+        // https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms644977(v=vs.85)
+        switch (code)
         {
-            auto requestSize = 0ul;
-            auto request = Request { code, wParam, lParam };
-
-            // Send hook data
-            if (WriteFile(pipe, &request, sizeof(request), &requestSize, NULL))
-            {
-                auto responseSize = 0ul;
-                auto response = 0l;
-
-                // Await server reply
-                if (ReadFile(pipe, &response, sizeof(response), &responseSize, NULL))
-                {
-                    return response;
-                }
-                else
-                {
-                    char buffer[32];
-                    _itoa_s(GetLastError(), buffer, 10);
-                    Log("Read");
-                    Log(buffer);
-                }
-            }
-            else
-            {
-                char buffer[32];
-                _itoa_s(GetLastError(), buffer, 10);
-                Log("Write");
-                Log(buffer);
-            }
+            case HCBT_ACTIVATE:
+                data.cbData = sizeof(CBTACTIVATESTRUCT);
+                data.lpData = reinterpret_cast<CBTACTIVATESTRUCT*>(lParam);
+                break;
+            case HCBT_CLICKSKIPPED:
+                data.cbData = sizeof(MOUSEHOOKSTRUCT);
+                data.lpData = reinterpret_cast<MOUSEHOOKSTRUCT*>(lParam);
+                break;
+            case HCBT_CREATEWND:
+                data.cbData = sizeof(CBT_CREATEWND);
+                data.lpData = reinterpret_cast<CBT_CREATEWND*>(lParam);
+                break;
+            case HCBT_MOVESIZE:
+                data.cbData = sizeof(RECT);
+                data.lpData = reinterpret_cast<RECT*>(lParam);
+                break;
         }
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
 
-    // Fallback if server can not dispatch the request
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+LRESULT CALLBACK DebugProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    if (code == HC_ACTION)
+    {
+        COPYDATASTRUCT data {};
+
+        data.dwData = code;
+        data.cbData = sizeof(DEBUGHOOKINFO);
+        data.lpData = reinterpret_cast<DEBUGHOOKINFO*>(lParam);
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+LRESULT CALLBACK ForegroundIdleProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    if (code == HC_ACTION)
+    {
+        COPYDATASTRUCT data {};
+
+        data.dwData = code;
+        data.cbData = sizeof(code);
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+LRESULT CALLBACK JournalPlaybackProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    if (code >= 0)
+    {
+        COPYDATASTRUCT data {};
+
+        data.dwData = code;
+        data.cbData = sizeof(code);
+
+        if (code == HC_GETNEXT)
+        {
+            data.cbData = sizeof(EVENTMSG);
+            data.lpData = reinterpret_cast<EVENTMSG*>(lParam);
+        }
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+LRESULT CALLBACK JournalRecordProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    if (code >= 0)
+    {
+        COPYDATASTRUCT data {};
+
+        data.dwData = code;
+        data.cbData = sizeof(EVENTMSG);
+        data.lpData = reinterpret_cast<EVENTMSG*>(lParam);
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    struct KBDHOOKSTRUCT
+    {
+        DWORD vkCode;
+        DWORD scanCode;
+        DWORD keyCount;
+        bool extended;
+        bool alt;
+        bool wasDown;
+        bool transition;
+    };
+
+    if (code >= 0)
+    {
+        KBDHOOKSTRUCT kb {};
+        COPYDATASTRUCT data {};
+
+        kb.vkCode = wParam;
+        kb.keyCount = lParam & 0xff;
+        kb.scanCode = (lParam >> 16) & 0xff;
+        kb.extended = (lParam & (1 << 24)) == 1;
+        kb.alt = (lParam & (1 << 29)) == 1;
+        kb.wasDown = (lParam & (1 << 30)) == 1;
+        kb.transition = (lParam & (1 << 31)) == 1;
+
+        data.dwData = code;
+        data.cbData = sizeof(KBDHOOKSTRUCT);
+        data.lpData = reinterpret_cast<KBDHOOKSTRUCT*>(lParam);
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+LRESULT CALLBACK MouseProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    if (code >= 0)
+    {
+        COPYDATASTRUCT data {};
+        MOUSEHOOKSTRUCT* mouse = reinterpret_cast<MOUSEHOOKSTRUCT*>(lParam);
+
+        RECT rect {};
+        POINT normalizedPoint = mouse->pt;
+
+        GetWindowRect(mouse->hwnd, &rect);
+        ScreenToClient(mouse->hwnd, &normalizedPoint);
+
+        data.dwData = code;
+        data.cbData = sizeof(MOUSEHOOKSTRUCT);
+        data.lpData = mouse;
+
+        auto x = mouse->pt.x - rect.left;
+        auto y = mouse->pt.y - rect.top;
+
+        // Log(x, y, "rect-based");
+        // Log(mouse->pt.x, mouse->pt.y, "raw");
+        // Log(normalizedPoint.x, normalizedPoint.y, "normalized");
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+LRESULT CALLBACK MessageProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    if (code >= 0)
+    {
+        COPYDATASTRUCT data {};
+
+        data.dwData = code;
+        data.cbData = sizeof(MSG);
+        data.lpData = reinterpret_cast<MSG*>(lParam);
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
+    return CallNextHookEx(hook, code, wParam, lParam);
+}
+
+// https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms644991(v=vs.85)
+LRESULT CALLBACK ShellProc(int code, WPARAM wParam, LPARAM lParam)
+{
+    if (code >= 0)
+    {
+        COPYDATASTRUCT data {};
+
+        data.dwData = code;
+        data.cbData = sizeof(code);
+
+        if (code == HSHELL_GETMINRECT)
+        {
+            data.cbData = sizeof(RECT);
+            data.lpData = reinterpret_cast<RECT*>(lParam);
+        }
+
+        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+    }
+
     return CallNextHookEx(hook, code, wParam, lParam);
 }
 
 extern "C" __declspec(dllexport)
-HHOOK Install(int idHook, HWND window, const char* pipeName)
+HHOOK Install(int idHook, HWND targetWindow, HWND serverWindow)
 {
-    if (hook == NULL && pipe == NULL)
+    if (hook == NULL && host == NULL)
     {
-        SetLastError(0ul);
+        auto targetProcessId = 0ul;
+        auto targetProcessThreadId = GetWindowThreadProcessId(targetWindow, &targetProcessId);
 
-        pipe = CreateFileA(pipeName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
-
-        // If no pipe is available, wait 3 seconds to retry
-        if (GetLastError() == ERROR_PIPE_BUSY)
+        switch (idHook)
         {
-            if (!WaitNamedPipeA(pipeName, 3000))
-            {
-                pipe = NULL;
-                return NULL;
-            }
+            case WH_CBT:
+                hook = SetWindowsHookExA(idHook, CBTProc, dll, targetProcessThreadId);
+                break;
+            case WH_DEBUG:
+                hook = SetWindowsHookExA(idHook, DebugProc, dll, targetProcessThreadId);
+                break;
+            case WH_CALLWNDPROC:
+                hook = SetWindowsHookExA(idHook, CallWndProc, dll, targetProcessThreadId);
+                break;
+            case WH_CALLWNDPROCRET:
+                hook = SetWindowsHookExA(idHook, CallWndProcRet, dll, targetProcessThreadId);
+                break;
+            case WH_FOREGROUNDIDLE:
+                hook = SetWindowsHookExA(idHook, ForegroundIdleProc, dll, targetProcessThreadId);
+                break;
+            case WH_JOURNALPLAYBACK:
+                hook = SetWindowsHookExA(idHook, JournalPlaybackProc, dll, targetProcessThreadId);
+                break;
+            case WH_JOURNALRECORD:
+                hook = SetWindowsHookExA(idHook, JournalRecordProc, dll, targetProcessThreadId);
+                break;
+            case WH_KEYBOARD:
+                hook = SetWindowsHookExA(idHook, KeyboardProc, dll, targetProcessThreadId);
+                break;
+            case WH_MOUSE:
+                hook = SetWindowsHookExA(idHook, MouseProc, dll, targetProcessThreadId);
+                break;
+            case WH_SHELL:
+                hook = SetWindowsHookExA(idHook, ShellProc, dll, targetProcessThreadId);
+                break;
+            case WH_GETMESSAGE:
+                hook = SetWindowsHookExA(idHook, MessageProc, dll, targetProcessThreadId);
+                break;
+            case WH_MSGFILTER:
+                hook = SetWindowsHookExA(idHook, MessageProc, dll, targetProcessThreadId);
+                break;
+            case WH_SYSMSGFILTER:
+                hook = SetWindowsHookExA(idHook, MessageProc, dll, targetProcessThreadId);
+                break;
         }
 
-        // Install hook if connected
-        if (pipe != NULL && pipe != INVALID_HANDLE_VALUE)
+        if (hook != NULL)
         {
-            auto targetProcessId = 0ul;
-            auto targetProcessThreadId = GetWindowThreadProcessId(window, &targetProcessId);
-
-            hook = SetWindowsHookExA(idHook, HookProc, dll, targetProcessThreadId);
+            host = serverWindow;
         }
     }
 
@@ -120,12 +325,8 @@ bool Uninstall()
     if (hook != NULL && UnhookWindowsHookEx(hook))
     {
         hook = NULL;
-
-        if (pipe != NULL && CloseHandle(pipe))
-        {
-            pipe = NULL;
-        }
+        host = NULL;
     }
 
-    return pipe == NULL && hook == NULL;
+    return host == NULL && hook == NULL;
 }

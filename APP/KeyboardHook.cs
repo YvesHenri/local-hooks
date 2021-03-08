@@ -24,6 +24,18 @@ namespace APP
             public UIntPtr dwExtraInfo;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public class KBDHOOKSTRUCT
+        {
+            public uint vkCode;
+            public uint scanCode;
+            public uint keyCount;
+            public bool extended;
+            public bool alt;
+            public bool wasDown;
+            public bool transition;
+        }
+
         protected override int LocalHookId => 2; // WH_KEYBOARD
         protected override int GlobalHookId => 13; // WH_KEYBOARD_LL
 
@@ -47,24 +59,28 @@ namespace APP
             if (nCode >= 0)
             {
                 var kdb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                var keyboardEventArgs = new KeyboardHookEventArgs(kdb.vkCode, kdb.scanCode, kdb.time, kdb.flags);
 
-                switch (wParam.ToInt32())
+                if (id == GlobalHookId)
                 {
-                    case WM_KEYDOWN:
-                    case WM_SYSKEYDOWN:
-                        HandleKeyDownHookEvent(keyboardEventArgs);
-                        break;
-                    case WM_KEYUP:
-                    case WM_SYSKEYUP:
-                        HandleKeyReleasedHookEvent(keyboardEventArgs);
-                        break;
-                }
+                    var keyboardEventArgs = new KeyboardHookEventArgs(kdb.vkCode, kdb.scanCode, kdb.time, kdb.flags);
 
-                // Trap key chain if it has been handled
-                if (keyboardEventArgs.Handled)
-                {
-                    return new IntPtr(1);
+                    switch (wParam.ToInt32())
+                    {
+                        case WM_KEYDOWN:
+                        case WM_SYSKEYDOWN:
+                            HandleKeyDownHookEvent(keyboardEventArgs);
+                            break;
+                        case WM_KEYUP:
+                        case WM_SYSKEYUP:
+                            HandleKeyReleasedHookEvent(keyboardEventArgs);
+                            break;
+                    }
+
+                    // Trap key chain if it has been handled
+                    if (keyboardEventArgs.Handled)
+                    {
+                        return new IntPtr(1);
+                    }
                 }
             }
 

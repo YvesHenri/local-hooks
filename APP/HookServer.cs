@@ -1,5 +1,5 @@
 ﻿using System;
-using System.IO.Pipes;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 
@@ -7,126 +7,201 @@ namespace APP
 {
     public class HookServer
     {
-        private readonly HookCallback callback;
-        private readonly NamedPipeServerStream pipe;
+        public delegate IntPtr WindowCallback(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-        public string Name { get; }
+        private readonly HookCallback hookCallback;
+        private readonly WindowCallback windowCallback;
 
-        public HookServer(HookCallback hookCallback)
+        public event EventHandler OnCreated;
+        public event EventHandler OnDestroyed;
+
+        public bool Running { get; private set; }
+        public IntPtr Handle { get; private set; }
+
+        public HookServer(HookCallback hookCallbackk)
         {
-            var name = Guid.NewGuid().ToString();
+            Running = false;
+            Handle = IntPtr.Zero;
 
-            Name = string.Format("\\\\.\\pipe\\{0}", name);
-            callback = new HookCallback(hookCallback);
-            pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            hookCallback = new HookCallback(hookCallbackk);
+            windowCallback = new WindowCallback(WndProc);
+
+            OnCreated += HookServer_OnCreated;
+            OnDestroyed += HookServer_OnDestroyed;
         }
 
-        /// <summary>
-        /// Starts the server in asynchronous mode.
-        /// </summary>
-        public void Start()
+        private void HookServer_OnDestroyed(object sender, EventArgs e)
         {
-            if (!pipe.IsConnected)
+            Console.WriteLine("Server destroyed!");
+        }
+
+        private void HookServer_OnCreated(object sender, EventArgs e)
+        {
+            Console.WriteLine("Server created!");
+        }
+
+        public bool Start()
+        {
+            if (!Running)
             {
-                Console.WriteLine("Starting...");
-                pipe.BeginWaitForConnection(new AsyncCallback(ConnectionCallback), null);
+                var processHandle = Process.GetCurrentProcess().Handle;
+                var windowClass = new WndClassEx
+                {
+                    lpszMenuName = null,
+                    hInstance = processHandle,
+                    cbSize = WndClassEx.Size,
+                    lpfnWndProc = windowCallback,
+                    lpszClassName = Guid.NewGuid().ToString()
+                };
+
+                // Register the dummy window class
+                var classAtom = RegisterClassEx(ref windowClass);
+
+                // Check whether the class was registered successfully
+                if (classAtom != 0u)
+                {
+                    // Create the dummy window
+                    Handle = CreateWindowEx(0x08000000, classAtom, "", 0, -1, -1, -1, -1, IntPtr.Zero, IntPtr.Zero, processHandle, IntPtr.Zero);
+                    Running = Handle != IntPtr.Zero;
+
+                    if (Running)
+                    {
+                        // Launch the message loop thread
+                        Task.Run(() =>
+                        {
+                            Message message;
+
+                            while (Running && GetMessage(out message, Handle, 0, 0) != 0)
+                            {
+                                TranslateMessage(ref message);
+                                DispatchMessage(ref message);
+                            }
+
+                            OnDestroyed?.Invoke(this, EventArgs.Empty);
+                            Console.WriteLine("End of message loop");
+                        });
+
+                        OnCreated?.Invoke(this, EventArgs.Empty);
+                    }
+                }
             }
+
+            return Running;
         }
 
-        /// <summary>
-        /// Stops the server.
-        /// </summary>
         public void Stop()
         {
-            if (pipe.IsConnected)
+            if (Running)
             {
-                try
-                {
-                    Console.WriteLine("Stopping...");
-                    pipe.WaitForPipeDrain();
-                }
-                finally
-                {
-                    pipe.Close();
-                    pipe.Dispose();
-                    Console.WriteLine("Stopped");
-                }
+                Running = false;
             }
         }
 
-        /// <summary>
-        /// Dispatches new connections and asynchronously begins reading requests.
-        /// </summary>
-        private void ConnectionCallback(IAsyncResult asyncResult)
+        private IntPtr WndProc(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam)
         {
-            lock (pipe)
+            const int WM_COPYDATA = 0x004A;
+
+            if (message == WM_COPYDATA)
             {
-                pipe.EndWaitForConnection(asyncResult);
+                var data = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
 
-                if (pipe.IsConnected)
-                {
-                    var requestSize = Marshal.SizeOf(typeof(HookRequest));
-                    var requestBuffer = new byte[requestSize];
+                Console.WriteLine("{3} Hook message = {0} ({0:X2}), wParam = {1} ({1:X4}), lParam = {2} ({2:X8})", data.dwData, wParam.ToInt32(), data.lpData.ToInt32(), DateTime.Now.ToShortTimeString());
 
-                    Console.WriteLine("Connected!");
+                return hookCallback.Invoke(data.dwData, wParam, data.lpData);
+            }
+            else
+            {
+                Console.WriteLine("{1} Window message: {0} ({0:X4})", message, DateTime.Now.ToShortTimeString());
 
-                    pipe.BeginRead(requestBuffer, 0, requestBuffer.Length, new AsyncCallback(RequestCallback), requestBuffer);
-                }
+                return DefWindowProc(hWnd, message, wParam, lParam);
             }
         }
 
-        /// <summary>
-        /// Dispatches incoming requests and asynchronously begins writing responses.
-        /// </summary>
-        private void RequestCallback(IAsyncResult asyncResult)
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DestroyWindow(IntPtr hwnd);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool TranslateMessage([In] ref Message lpMsg);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr DispatchMessage([In] ref Message lpmsg);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr DefWindowProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern void PostQuitMessage(int nExitCode);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.U2)]
+        private static extern ushort RegisterClassEx([In] ref WndClassEx lpwcx);
+
+        [DllImport("user32.dll")]
+        private static extern int GetMessage(out Message lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr CreateWindowEx(uint exStyle, ushort classAtom, string title, uint style, int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr lpParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Point
         {
-            lock (pipe)
-            {
-                var requestActualSize = pipe.EndRead(asyncResult);
-                var requestExpectedSize = Marshal.SizeOf(typeof(HookRequest));
-
-                if (pipe.IsConnected)
-                {
-                    if (requestActualSize == requestExpectedSize)
-                    {
-                        Console.WriteLine("Request received.");
-
-                        var requestBuffer = asyncResult.AsyncState as byte[];
-                        var request = Marshaller.ByteArrayToStruct<HookRequest>(requestBuffer);
-                        var response = callback.Invoke(request.Code, request.WParam, request.LParam);
-                        var responseBuffer = Marshaller.IntPtrToByteArray(response);
-
-                        pipe.Write(responseBuffer, 0, responseBuffer.Length);
-                        pipe.Flush();
-                    }
-
-                    var nextRequestBuffer = new byte[requestExpectedSize];
-
-                    pipe.BeginRead(nextRequestBuffer, 0, nextRequestBuffer.Length, new AsyncCallback(RequestCallback), nextRequestBuffer);
-                }
-            }
+            public int X;
+            public int Y;
         }
 
-        private static class Marshaller
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Message
         {
-            public static T ByteArrayToStruct<T>(byte[] bytes) where T : struct
-            {
-                var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
+            IntPtr hwnd;
+            uint message;
+            UIntPtr wParam;
+            IntPtr lParam;
+            int time;
+            Point pt;
+            int lPrivate;
+        }
 
-                try
-                {
-                    return Marshal.PtrToStructure<T>(handle.AddrOfPinnedObject());
-                }
-                finally
-                {
-                    handle.Free();
-                }
-            }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WndClassEx
+        {
+            public uint cbSize;
+            public uint style;
+            [MarshalAs(UnmanagedType.FunctionPtr)]
+            public WindowCallback lpfnWndProc;
+            public int cbClsExtra;
+            public int cbWndExtra;
+            public IntPtr hInstance;
+            public IntPtr hIcon;
+            public IntPtr hCursor;
+            public IntPtr hbrBackground;
+            public string lpszMenuName;
+            public string lpszClassName;
+            public IntPtr hIconSm;
 
-            public static byte[] IntPtrToByteArray(IntPtr pointer)
-            {
-                return BitConverter.GetBytes(pointer.ToInt32());
-            }
+            public static uint Size = (uint) Marshal.SizeOf(typeof(WndClassEx));
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct COPYDATASTRUCT
+        {
+            public int dwData;
+            public int cbData;
+            public IntPtr lpData;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MSLLHOOKSTRUCT
+        {
+            public int x;
+            public int y;
+            public int data;
+            public uint flags;
+            public uint time;
+            public UIntPtr dwExtraInfo;
         }
     }
 }

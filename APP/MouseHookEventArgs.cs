@@ -1,4 +1,7 @@
-﻿namespace APP
+﻿using System;
+using System.Runtime.InteropServices;
+
+namespace APP
 {
     public class MouseHookEventArgs
     {
