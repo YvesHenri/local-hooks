@@ -1,8 +1,7 @@
 #include <Windows.h>
-#include <iostream>
 
 #pragma data_seg(".dll")
-HWND host = NULL;
+HWND server = NULL;
 #pragma comment(linker, "/SECTION:.dll,RWS")
 #pragma data_seg()
 
@@ -29,10 +28,12 @@ LRESULT CALLBACK CallWndProc(int code, WPARAM wParam, LPARAM lParam)
         data.cbData = sizeof(CWPSTRUCT);
         data.lpData = reinterpret_cast<CWPSTRUCT*>(lParam);
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
 LRESULT CALLBACK CallWndProcRet(int code, WPARAM wParam, LPARAM lParam)
@@ -45,10 +46,12 @@ LRESULT CALLBACK CallWndProcRet(int code, WPARAM wParam, LPARAM lParam)
         data.cbData = sizeof(CWPRETSTRUCT);
         data.lpData = reinterpret_cast<CWPRETSTRUCT*>(lParam);
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
 LRESULT CALLBACK CBTProc(int code, WPARAM wParam, LPARAM lParam)
@@ -60,7 +63,6 @@ LRESULT CALLBACK CBTProc(int code, WPARAM wParam, LPARAM lParam)
         data.dwData = code;
         data.cbData = sizeof(code);
 
-        // https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms644977(v=vs.85)
         switch (code)
         {
             case HCBT_ACTIVATE:
@@ -81,10 +83,12 @@ LRESULT CALLBACK CBTProc(int code, WPARAM wParam, LPARAM lParam)
                 break;
         }
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
 LRESULT CALLBACK DebugProc(int code, WPARAM wParam, LPARAM lParam)
@@ -97,10 +101,12 @@ LRESULT CALLBACK DebugProc(int code, WPARAM wParam, LPARAM lParam)
         data.cbData = sizeof(DEBUGHOOKINFO);
         data.lpData = reinterpret_cast<DEBUGHOOKINFO*>(lParam);
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
 LRESULT CALLBACK ForegroundIdleProc(int code, WPARAM wParam, LPARAM lParam)
@@ -112,10 +118,12 @@ LRESULT CALLBACK ForegroundIdleProc(int code, WPARAM wParam, LPARAM lParam)
         data.dwData = code;
         data.cbData = sizeof(code);
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
 LRESULT CALLBACK JournalPlaybackProc(int code, WPARAM wParam, LPARAM lParam)
@@ -133,10 +141,12 @@ LRESULT CALLBACK JournalPlaybackProc(int code, WPARAM wParam, LPARAM lParam)
             data.lpData = reinterpret_cast<EVENTMSG*>(lParam);
         }
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
 LRESULT CALLBACK JournalRecordProc(int code, WPARAM wParam, LPARAM lParam)
@@ -149,10 +159,12 @@ LRESULT CALLBACK JournalRecordProc(int code, WPARAM wParam, LPARAM lParam)
         data.cbData = sizeof(EVENTMSG);
         data.lpData = reinterpret_cast<EVENTMSG*>(lParam);
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
 LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam)
@@ -185,10 +197,12 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam)
         data.cbData = sizeof(KBDHOOKSTRUCT);
         data.lpData = reinterpret_cast<KBDHOOKSTRUCT*>(lParam);
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
 LRESULT CALLBACK MouseProc(int code, WPARAM wParam, LPARAM lParam)
@@ -196,29 +210,17 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wParam, LPARAM lParam)
     if (code >= 0)
     {
         COPYDATASTRUCT data {};
-        MOUSEHOOKSTRUCT* mouse = reinterpret_cast<MOUSEHOOKSTRUCT*>(lParam);
-
-        RECT rect {};
-        POINT normalizedPoint = mouse->pt;
-
-        GetWindowRect(mouse->hwnd, &rect);
-        ScreenToClient(mouse->hwnd, &normalizedPoint);
 
         data.dwData = code;
         data.cbData = sizeof(MOUSEHOOKSTRUCT);
-        data.lpData = mouse;
+        data.lpData = reinterpret_cast<MOUSEHOOKSTRUCT*>(lParam);
 
-        auto x = mouse->pt.x - rect.left;
-        auto y = mouse->pt.y - rect.top;
-
-        // Log(x, y, "rect-based");
-        // Log(mouse->pt.x, mouse->pt.y, "raw");
-        // Log(normalizedPoint.x, normalizedPoint.y, "normalized");
-
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }   
 }
 
 LRESULT CALLBACK MessageProc(int code, WPARAM wParam, LPARAM lParam)
@@ -231,13 +233,15 @@ LRESULT CALLBACK MessageProc(int code, WPARAM wParam, LPARAM lParam)
         data.cbData = sizeof(MSG);
         data.lpData = reinterpret_cast<MSG*>(lParam);
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
-// https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms644991(v=vs.85)
+// TODO: https://docs.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms644991(v=vs.85)
 LRESULT CALLBACK ShellProc(int code, WPARAM wParam, LPARAM lParam)
 {
     if (code >= 0)
@@ -253,16 +257,18 @@ LRESULT CALLBACK ShellProc(int code, WPARAM wParam, LPARAM lParam)
             data.lpData = reinterpret_cast<RECT*>(lParam);
         }
 
-        return SendMessageA(host, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
+        return SendMessageA(server, WM_COPYDATA, wParam, reinterpret_cast<LPARAM>(&data));
     }
-
-    return CallNextHookEx(hook, code, wParam, lParam);
+    else
+    {
+        return CallNextHookEx(NULL, code, wParam, lParam);
+    }
 }
 
 extern "C" __declspec(dllexport)
 HHOOK Install(int idHook, HWND targetWindow, HWND serverWindow)
 {
-    if (hook == NULL && host == NULL)
+    if (hook == NULL && server == NULL)
     {
         auto targetProcessId = 0ul;
         auto targetProcessThreadId = GetWindowThreadProcessId(targetWindow, &targetProcessId);
@@ -312,7 +318,7 @@ HHOOK Install(int idHook, HWND targetWindow, HWND serverWindow)
 
         if (hook != NULL)
         {
-            host = serverWindow;
+            server = serverWindow;
         }
     }
 
@@ -325,8 +331,8 @@ bool Uninstall()
     if (hook != NULL && UnhookWindowsHookEx(hook))
     {
         hook = NULL;
-        host = NULL;
+        server = NULL;
     }
 
-    return host == NULL && hook == NULL;
+    return server == NULL && hook == NULL;
 }

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace APP
 {
@@ -22,7 +23,6 @@ namespace APP
         protected abstract int LocalHookId { get; }
         protected abstract int GlobalHookId { get; }
 
-        protected int id;
         protected IntPtr instance;
 
         protected readonly HookServer server;
@@ -32,6 +32,8 @@ namespace APP
         {
             get => instance != IntPtr.Zero;
         }
+
+        public HookMode Mode { get; protected set; }
 
         public Hook()
         {
@@ -45,7 +47,7 @@ namespace APP
         /// <summary>
         /// Only services can install/uninstall hooks.
         /// </summary>
-        public class Service<THook> where THook : Hook, new()
+        public class Service<THook> : IDisposable where THook : Hook, new()
         {
             private readonly Dictionary<Process, THook> localHooks;
 
@@ -53,8 +55,17 @@ namespace APP
 
             public Service()
             {
-                Global = new THook();
                 localHooks = new Dictionary<Process, THook>();
+
+                Global = new THook
+                {
+                    Mode = HookMode.Global
+                };
+            }
+
+            public void Dispose()
+            {
+                Destroy();
             }
 
             public THook Install()
@@ -63,7 +74,6 @@ namespace APP
                 {
                     var processModuleHandle = WinAPI.LoadLibrary("User32");
 
-                    Global.id = Global.GlobalHookId;
                     Global.instance = WinAPI.SetWindowsHookEx(Global.GlobalHookId, Global.callback, processModuleHandle, 0);
                 }
 
@@ -77,28 +87,25 @@ namespace APP
                 {
                     EventHandler eventHandler = null;
 
-                    WinAPI.IsWow64Process(process.Handle, out bool isWow64Process);
-                    
-                    hook = new THook();
-                    hook.id = hook.LocalHookId;
-                    hook.server.OnDestroyed += eventHandler = (sender, args) =>
+                    hook = new THook
                     {
-                        lock (hook.server)
-                        {
-                            Console.WriteLine("Server went down. Uninstalling local hook for process {0}...", process.Id);
+                        Mode = HookMode.Local
+                    };
 
-                            // Uninstall hook if server crashed or went down for some reason
-                            if (Uninstall(process))
-                            {
-                                hook.server.OnDestroyed -= eventHandler;
-                            }
+                    hook.server.OnShutdown += eventHandler = (sender, args) =>
+                    {
+                        Debug.WriteLine("Server went down for some reason. Uninstalling local hook for process {0}...", process.Id);
+
+                        // Uninstall hook if server crashed or went down for some reason
+                        if (Uninstall(process))
+                        {
+                            hook.server.OnShutdown -= eventHandler;
                         }
                     };
 
                     if (hook.server.Start())
                     {
-                        // If OS is not 64 bits, process can't be 64 bits either
-                        if (Environment.Is64BitOperatingSystem && !isWow64Process)
+                        if (Is64BitsProcess(process))
                         {
                             hook.instance = Install64(hook.LocalHookId, process.MainWindowHandle, hook.server.Handle);
                         }
@@ -106,12 +113,12 @@ namespace APP
                         {
                             hook.instance = Install32(hook.LocalHookId, process.MainWindowHandle, hook.server.Handle);
                         }
-                    }
 
-                    // Cache successfull hooks
-                    if (hook.Installed)
-                    {
-                        localHooks.Add(process, hook);
+                        // Cache successfull hooks
+                        if (hook.Installed)
+                        {
+                            localHooks.Add(process, hook);
+                        }
                     }
                 }
 
@@ -135,12 +142,9 @@ namespace APP
 
             private bool Uninstall(THook hook, Process process)
             {
-                WinAPI.IsWow64Process(process.Handle, out bool isWow64Process);
-
                 hook.server.Stop();
 
-                // If OS is not 64 bits, process can't be 64 bits either
-                if (Environment.Is64BitOperatingSystem && !isWow64Process)
+                if (Is64BitsProcess(process))
                 {
                     return Uninstall64() && localHooks.Remove(process);
                 }
@@ -160,6 +164,14 @@ namespace APP
                 }
 
                 return uninstalled;
+            }
+
+            private bool Is64BitsProcess(Process process)
+            {
+                WinAPI.IsWow64Process(process.Handle, out bool isWow64Process);
+
+                // If OS is not 64 bits, process can't be 64 bits either
+                return Environment.Is64BitOperatingSystem && !isWow64Process;
             }
         }
     }

@@ -60,7 +60,7 @@ namespace APP
             {
                 var kdb = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
 
-                if (id == GlobalHookId)
+                if (HookMode.Global.Equals(Mode))
                 {
                     var keyboardEventArgs = new KeyboardHookEventArgs(kdb.vkCode, kdb.scanCode, kdb.time, kdb.flags);
 

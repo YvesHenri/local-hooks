@@ -142,7 +142,7 @@ namespace APP
                 };
             }
 
-            SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(Input)));
+            SendInput((uint) inputs.Length, inputs, Marshal.SizeOf(typeof(Input)));
         }
 
         public static void PressKey(ushort scanCode)

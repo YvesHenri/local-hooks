@@ -59,14 +59,14 @@ namespace APP
         {
             if (nCode >= 0)
             {
-                if (id == LocalHookId)
+                if (HookMode.Local.Equals(Mode))
                 {
                     var ms = Marshal.PtrToStructure<MOUSEHOOKSTRUCT>(lParam);
 
-                    Console.WriteLine("{0}, {1}", ms.x, ms.y);
+                    // Console.WriteLine("{0}, {1}", ms.x, ms.y);
                 }
 
-                if (id == GlobalHookId)
+                if (HookMode.Global.Equals(Mode))
                 {
                     var ms = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
 

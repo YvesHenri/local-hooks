@@ -240,5 +240,39 @@ namespace APP
                 HookService.Mouse.Uninstall(process);
             }
         }
+
+        private void button5_Click(object sender, EventArgs e)
+        {
+            var imperianic = Process.GetProcessesByName("Imperianic DirectX9").FirstOrDefault();
+
+            if (imperianic != null)
+            {
+                System.Threading.Thread.Sleep(2000);
+
+                //WinAPI.SendMessage(imperianic.MainWindowHandle, 0x104, )
+
+                // Sender.PressKey(42);
+
+                Sender2.Send(Sender2.ScanCodeShort.F8);
+
+                /*
+                Sender.SendKeyboardInput(new Sender.KeyboardInput[]
+                {
+                    new Sender.KeyboardInput
+                    {
+                        wVk = 0x70,
+                        dwFlags = (uint) (Sender.KeyEventF.KeyDown.GetHashCode())
+                    },
+                    new Sender.KeyboardInput
+                    {
+                        wVk = 0x70,
+                        dwFlags = (uint) (Sender.KeyEventF.KeyUp).GetHashCode()
+                    }
+                });
+                */
+
+                Console.WriteLine("Sent");
+            }
+        }
     }
 }
